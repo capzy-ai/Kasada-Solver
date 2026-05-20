@@ -142,6 +142,24 @@ When the task is ready (`status: "ready"`), `solution` contains:
 | `userAgent` | `string` | User-Agent used during solve — must reuse for subsequent requests |
 | `expiresAt` | `number` | Unix timestamp when the CT expires |
 
+### Example
+
+```json
+{
+  "status": "ready",
+  "solution": {
+    "x-kpsdk-ct": "<client token (CT) - ~30 min lifetime, reusable>",
+    "x-kpsdk-cd": "<client data (CD) - single-use proof-of-work per request>",
+    "cookies": {
+      "KP_UIDz": "<value>",
+      "KP_UIDz-ssn": "<value>"
+    },
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    "expiresAt": 1735691400
+  }
+}
+```
+
 ### How to use the result
 
 Add `x-kpsdk-ct` and `x-kpsdk-cd` as HTTP headers, set the KP_UIDz cookies, and use the exact User-Agent. CT lasts ~30 minutes — re-solve only `cd` for each subsequent request.
