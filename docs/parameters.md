@@ -23,7 +23,18 @@ Every field you can pass to `POST /createTask` for this task type.
 | Field | Type | Required | Notes |
 |-------|------|:--------:|-------|
 | `type` | `string` | yes | KasadaCaptchaTaskProxyLess or KasadaCaptchaTask |
-| `websiteURL` | `string` | yes | Any URL on the Kasada-protected domain |
+| `websiteURL` | `string` | yes | The Kasada-protected URL you want tokens for. Can be an HTML page **or** a JSON/GraphQL API endpoint (e.g. `https://api.example.com/graphql`). Accepted aliases: `pageURL`, `websiteUrl`. |
+| `bootstrapURL` | `string` | no | Page to load in order to arm the Kasada SDK when `websiteURL` is an API endpoint. By default we derive it: an `api.`/`gateway.` subdomain maps to the brand's `www` site (e.g. `api.example.com` → `https://www.example.com/`), and a path-based API on an ordinary host uses that host's root. Set this explicitly if the derived page doesn't serve the challenge. |
+| `pjsUrl` | `string` | no | The Kasada SDK script URL (`p.js` / `ips.js`) — **not** your API endpoint. If you already know it, we bootstrap on its origin (the most reliable choice). Takes precedence over `websiteDomain`; overridden by `bootstrapURL`. |
+| `websiteDomain` | `string` | no | Shorthand alternative to `bootstrapURL` — just the domain to bootstrap on (e.g. `www.example.com`). Ignored if `bootstrapURL` or `pjsUrl` is set. |
+
+> **API endpoints.** Kasada's challenge script is served on HTML pages, not
+> on API hosts. When `websiteURL` is an API endpoint (a host like
+> `api.…`/`gateway.…`, or a path containing `/graphql`, `/api/`, `/vN/`,
+> or ending in `.json`), Capzy automatically navigates to a bootstrap page
+> to arm the SDK, then mints `x-kpsdk-cd` against your endpoint. If the
+> auto-derived host root doesn't serve the challenge, pass `bootstrapURL`
+> (or `websiteDomain`) pointing at the brand's web page.
 
 
 ### Proxy fields (only for `KasadaCaptchaTask`)
