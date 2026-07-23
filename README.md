@@ -42,8 +42,41 @@ Kasada is a bot defense platform that uses a custom JavaScript VM (ips.js) to fi
 
 | Task type | When to use | Cost / solve |
 |-----------|-------------|-------------:|
-| `KasadaCaptchaTaskProxyLess`             | Proxyless (Capzy supplies the IP) | **$0.001**   |
-| `KasadaCaptchaTask`                       | You supply the proxy              | **$0.001**   |
+| `KasadaCaptchaTaskProxyLess`             | Proxyless (Capzy supplies the IP)  | **$0.001**   |
+| `KasadaCaptchaTask`                       | You supply the proxy               | **$0.001**   |
+| `KasadaCaptchaCDTask`                     | **Browserless** x-kpsdk-cd generator | **$0.001**   |
+
+### Kasada CD — browserless proof-of-work generator
+
+Every protected Kasada request needs **two** tokens: `x-kpsdk-ct` (the session
+token, reusable ~30 min) and `x-kpsdk-cd` (a **single-use** proof-of-work,
+regenerated per request, consumed within ~5s of mint). A CT alone gets a `403`.
+
+The CD is **pure computation** (a chained-SHA256 proof-of-work). Once you have a
+session, you don't need a browser to mint each CD — just the algorithm.
+**`KasadaCaptchaCDTask`** is that generator:
+
+```jsonc
+{
+  "type": "KasadaCaptchaCDTask",
+  "site": "<your target site identifier>",   // contact support to add new sites
+  "s":    "<platformInputs from your live session, e.g. tp-v2-input…>",
+  "ct":   "<x-kpsdk-ct from the /tl response header>",
+  "st":   "<x-kpsdk-st from the /tl response header>",
+  "fc":   "<x-kpsdk-fc from the /mfc response header, if used>"
+}
+```
+
+→ returns a fresh `x-kpsdk-cd` (JSON: `workTime/id/answers/duration/d/st/rst`) in
+**microseconds, no browser, no proxy**. The PoW is `seed = sha256(s, workTime, id, K)`
+then a chained nonce search: you pass `s` (platformInputs, the per-request value from
+your live session) and a `site` identifier; we resolve the per-site challenge constant
+`K`. Because the CD is single-use and short-lived, **generate it right before the
+request** and send it immediately.
+
+> Bootstrapping a session: mint the `ct`/`st` once with the browser-based
+> `KasadaCaptchaTask` (~30 min lifetime), then call `KasadaCaptchaCDTask` for a
+> fresh `cd` per protected request.
 
 For consistency across the target site, use the proxy variant with the
 **same proxy your session is already running through** — the solver
