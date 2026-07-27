@@ -23,7 +23,7 @@ Every field you can pass to `POST /createTask` for this task type.
 | Field | Type | Required | Notes |
 |-------|------|:--------:|-------|
 | `type` | `string` | yes | `KasadaCaptchaTaskProxyLess` / `KasadaCaptchaTask` (browser solve → CT, CD when available), or **`KasadaCaptchaCDTask`** (browserless `x-kpsdk-cd` generator — you pass `site`/`s`/`ct`/`st`/`fc`, we compute the PoW natively; see [the CD section below](#kasadacaptchacdtask--browserless-cd-generator)) |
-| `websiteURL` | `string` | yes | The Kasada-protected URL you want tokens for. Can be an HTML page **or** a JSON/GraphQL API endpoint (e.g. `https://api.example.com/graphql`). Accepted aliases: `pageURL`, `websiteUrl`. |
+| `websiteURL` | `string` | yes | The Kasada-protected URL you want tokens for. **Use the full canonical page URL, including `www` and a trailing slash** (e.g. `https://www.example.com/`); a bare apex domain often won't arm the Kasada challenge, so no tokens come back. Can be an HTML page **or** a JSON/GraphQL API endpoint (e.g. `https://api.example.com/graphql`). Accepted aliases: `pageURL`, `websiteUrl`. |
 | `bootstrapURL` | `string` | no | Page to load in order to arm the Kasada SDK when `websiteURL` is an API endpoint. By default we derive it: an `api.`/`gateway.` subdomain maps to the brand's `www` site (e.g. `api.example.com` → `https://www.example.com/`), and a path-based API on an ordinary host uses that host's root. Set this explicitly if the derived page doesn't serve the challenge. |
 | `pjsUrl` | `string` | no | The Kasada SDK script URL (`p.js` / `ips.js`) — **not** your API endpoint. If you already know it, we bootstrap on its origin (the most reliable choice). Takes precedence over `websiteDomain`; overridden by `bootstrapURL`. |
 | `websiteDomain` | `string` | no | Shorthand alternative to `bootstrapURL` — just the domain to bootstrap on (e.g. `www.example.com`). Ignored if `bootstrapURL` or `pjsUrl` is set. |
@@ -38,27 +38,88 @@ Every field you can pass to `POST /createTask` for this task type.
 
 ### `KasadaCaptchaCDTask` — browserless CD generator
 
-Generates a fresh single-use `x-kpsdk-cd` from your own live session values — no
+Generates a fresh single-use `x-kpsdk-cd` from your own live session values. No
 browser, no proxy, microseconds per call. The CD is a chained-SHA256 proof-of-work:
-`seed = sha256(s, workTime, id, K)`, then a nonce search per subchallenge clears the
-difficulty target, chained through the rounds. You supply the session values; we hold
-the per-site challenge configuration (resolved from `site`).
+`seed = sha256(s, workTime, id, k)`, then a nonce search per subchallenge clears the
+difficulty target, chained through the rounds. You send your session values plus
+your site's `k`; we run the proof and hand back the token.
 
 | Field | Type | Required | Notes |
 |-------|------|:--------:|-------|
 | `type` | `string` | yes | `KasadaCaptchaCDTask` |
-| `site` | `string` | yes | Site identifier — we resolve the per-site challenge configuration. Contact support if your site isn't supported yet. |
-| `s` | `string` | yes | `platformInputs` — the per-request value from your live Kasada session (e.g. `tp-v2-input…`). It rotates frequently, so read it fresh from the session you're replaying against. Alias: `platformInputs`. |
-| `ct` | `string` | yes | `x-kpsdk-ct` from the `/tl` response header (your session token) — echoed back for replay. |
-| `st` | `string` | yes | `x-kpsdk-st` from the `/tl` response header — written into the cd's `st` field. |
-| `fc` | `string` | no | `x-kpsdk-fc` from the `/mfc` response header — base64 `cryptoChallenge` config that sets the difficulty / subchallenge count when present. Omit to use the site default. |
+| `k` | `string` | yes | Your site's proof-of-work constant (64-char hex). Extract it once with [`get_k.py`](../examples/python/get_k.py), then reuse it. It is stable per site. See [where each value comes from](#where-each-value-comes-from). |
+| `ct` | `string` | yes | `x-kpsdk-ct` from the `/tl` response header (your session token), echoed back for replay. |
+| `st` | `string` | yes | `x-kpsdk-st` from the `/tl` response header, written into the cd's `st` field. |
+| `fc` | `string` | no | `x-kpsdk-fc` from the `/mfc` response header. base64 `cryptoChallenge` config that sets the difficulty / subchallenge count when present. Omit to use the site default. |
+| `s` | `string` | no | `platformInputs`. Defaults to the v2 base `tp-v2-input`, which validates on v2 sites. Only set it if your site uses a per-request suffix (`get_k.py` prints the `s` it observed). Alias: `platformInputs`. |
 | `workTime` | `integer` | no | Override the cd's `workTime` (ms). Defaults to now. |
 | `id` | `string` | no | Override the 32-hex cd `id`. Defaults to a fresh random id. |
 
-> **No proxy fields** — CD generation is pure computation and IP-independent.
+> **No proxy fields.** CD generation is pure computation and IP-independent.
 > The CD is single-use and valid ~5 seconds from its `workTime`; generate it
 > immediately before the request you need it for. Reuse the same `ct`/`st`/
-> User-Agent across the session that minted them — the cd binds to that session.
+> User-Agent across the session that minted them. the cd binds to that session.
+
+> **Most integrations don't need this task.** `KasadaCaptchaTask` /
+> `…ProxyLess` already return a ready-to-use `x-kpsdk-cd` alongside `x-kpsdk-ct`
+> in a single solve, with no `k` and no script. Reach for `KasadaCaptchaCDTask`
+> only when you run your own long-lived Kasada session and want to mint many fresh
+> CDs from one `k` without re-launching a browser each time.
+
+#### Where each value comes from
+
+**`ct` / `st` / `fc`** you read off your own session. From a real unblocked
+session on the target (your browser's DevTools → Network, or the HTTP client that
+holds the session):
+
+1. Tick **Preserve log**, filter by `tl`, open the `POST …/<uuid>/<uuid>/tl`
+   request. Its **Response Headers** give you:
+   - `x-kpsdk-ct` → **`ct`**
+   - `x-kpsdk-st` → **`st`**
+2. Filter by `mfc`; if the site makes that request, its `x-kpsdk-fc` response
+   header → **`fc`** (omit `fc` when there's no `/mfc` request; many sites have none).
+
+**`k`** is your site's proof-of-work constant. It is not on the page, not a
+header, and not a field of the `x-kpsdk-cd` body, so we extract it for you: submit
+a **`KasadaGetKTask`** with your `websiteURL`. We run a real browser on your
+target, watch Kasada mint a token, read `k` out of the proof-of-work input, and
+**validate it against that live token** before returning it. This task is **free**
+(cost 0), but it goes through `createTask` with your API key, so the run is tracked
+on your account.
+
+```bash
+# Get your k (free, tracked on your key):
+curl -s https://api.capzy.ai/createTask -H 'Content-Type: application/json' -d '{
+  "clientKey": "capzy_xxxxxxxxxxxxxxxxxxxxxxxx",
+  "task": { "type": "KasadaGetKTaskProxyLess", "websiteURL": "https://www.your-target.com/" }
+}'
+# poll getTaskResult -> { "solution": { "k": "<64-hex constant>", "s": "tp-v2-input", "validated": true } }
+```
+
+Run it once, save the `k`, and reuse it on every CD call. It is stable per site.
+There's also a point-and-click version on the
+[product page](https://capzy.ai/solvers/kasada-cd) (Get your values tab), and a
+self-host script [`get_k.py`](../examples/python/get_k.py) if you'd rather run it
+locally.
+
+#### Worked example
+
+```bash
+curl -s https://api.capzy.ai/createTask -H 'Content-Type: application/json' -d '{
+  "clientKey": "capzy_xxxxxxxxxxxxxxxxxxxxxxxx",
+  "task": {
+    "type": "KasadaCaptchaCDTask",
+    "k":    "<your site k, from get_k.py>",
+    "ct":   "0aXY...    (x-kpsdk-ct from the /tl response)",
+    "st":   "1721800000 (x-kpsdk-st from the /tl response)",
+    "fc":   "eyJ...      (x-kpsdk-fc from the /mfc response, optional)"
+  }
+}'
+```
+
+The `solution` returns a fresh `x-kpsdk-cd` (plus your `ct`/`st` echoed back).
+Attach `x-kpsdk-cd` + `x-kpsdk-ct` as request headers within ~5 seconds, on the
+same session/User-Agent you captured the inputs from.
 
 
 ### Proxy fields (only for `KasadaCaptchaTask`)
