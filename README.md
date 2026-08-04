@@ -1,8 +1,8 @@
 <div align="center">
 
-<img src="https://capzy.ai/capzy-logo.svg" alt="Capzy" width="220" />
+<img src="https://capzy.ai/capzy-icon.png" alt="Capzy" width="96" />
 
-# Kasada Bot Defense Solver
+# Kasada Bot Defense Captcha Solver
 
 **Bypass Kasada. Returns x-kpsdk-ct + x-kpsdk-cd + cookies in ~1.6s.**
 
@@ -42,41 +42,8 @@ Kasada is a bot defense platform that uses a custom JavaScript VM (ips.js) to fi
 
 | Task type | When to use | Cost / solve |
 |-----------|-------------|-------------:|
-| `KasadaCaptchaTaskProxyLess`             | Proxyless (Capzy supplies the IP)  | **$0.001**   |
-| `KasadaCaptchaTask`                       | You supply the proxy               | **$0.001**   |
-| `KasadaCaptchaCDTask`                     | **Browserless** x-kpsdk-cd generator | **$0.001**   |
-
-### Kasada CD — browserless proof-of-work generator
-
-Every protected Kasada request needs **two** tokens: `x-kpsdk-ct` (the session
-token, reusable ~30 min) and `x-kpsdk-cd` (a **single-use** proof-of-work,
-regenerated per request, consumed within ~5s of mint). A CT alone gets a `403`.
-
-The CD is **pure computation** (a chained-SHA256 proof-of-work). Once you have a
-session, you don't need a browser to mint each CD — just the algorithm.
-**`KasadaCaptchaCDTask`** is that generator:
-
-```jsonc
-{
-  "type": "KasadaCaptchaCDTask",
-  "site": "<your target site identifier>",   // contact support to add new sites
-  "s":    "<platformInputs from your live session, e.g. tp-v2-input…>",
-  "ct":   "<x-kpsdk-ct from the /tl response header>",
-  "st":   "<x-kpsdk-st from the /tl response header>",
-  "fc":   "<x-kpsdk-fc from the /mfc response header, if used>"
-}
-```
-
-→ returns a fresh `x-kpsdk-cd` (JSON: `workTime/id/answers/duration/d/st/rst`) in
-**microseconds, no browser, no proxy**. The PoW is `seed = sha256(s, workTime, id, K)`
-then a chained nonce search: you pass `s` (platformInputs, the per-request value from
-your live session) and a `site` identifier; we resolve the per-site challenge constant
-`K`. Because the CD is single-use and short-lived, **generate it right before the
-request** and send it immediately.
-
-> Bootstrapping a session: mint the `ct`/`st` once with the browser-based
-> `KasadaCaptchaTask` (~30 min lifetime), then call `KasadaCaptchaCDTask` for a
-> fresh `cd` per protected request.
+| `KasadaCaptchaTaskProxyLess`             | Proxyless (Capzy supplies the IP) | **$0.001**   |
+| `KasadaCaptchaTask`                       | You supply the proxy              | **$0.001**   |
 
 For consistency across the target site, use the proxy variant with the
 **same proxy your session is already running through** — the solver
@@ -175,24 +142,6 @@ When the task is ready (`status: "ready"`), `solution` contains:
 | `userAgent` | `string` | User-Agent used during solve — must reuse for subsequent requests |
 | `expiresAt` | `number` | Unix timestamp when the CT expires |
 
-### Example
-
-```json
-{
-  "status": "ready",
-  "solution": {
-    "x-kpsdk-ct": "<client token (CT) - ~30 min lifetime, reusable>",
-    "x-kpsdk-cd": "<client data (CD) - single-use proof-of-work per request>",
-    "cookies": {
-      "KP_UIDz": "<value>",
-      "KP_UIDz-ssn": "<value>"
-    },
-    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-    "expiresAt": 1735691400
-  }
-}
-```
-
 ### How to use the result
 
 Add `x-kpsdk-ct` and `x-kpsdk-cd` as HTTP headers, set the KP_UIDz cookies, and use the exact User-Agent. CT lasts ~30 minutes — re-solve only `cd` for each subsequent request.
@@ -217,6 +166,24 @@ Add `x-kpsdk-ct` and `x-kpsdk-cd` as HTTP headers, set the KP_UIDz cookies, and 
 Capzy solves 25+ captcha types. Full catalog at
 [capzy.ai/solvers](https://capzy.ai/solvers). Each type has its own
 solver repo on [github.com/capzy-ai](https://github.com/capzy-ai).
+
+## The Capzy platform
+
+Capzy is web access infrastructure for modern automation. Beyond captcha solving:
+
+| Product | What it does |
+|---------|--------------|
+| **[Solver API](https://capzy.ai/solvers)** | Solve 25+ captcha types through one HTTP API. |
+| **[Cloud Browser](https://capzy.ai/browser)** | Real remote Chrome over CDP / WebSocket, billed per GB. |
+| **[Fingerprint API](https://capzy.ai/fingerprints)** | Coherent, authentic browser fingerprints on demand. |
+| **[Proxies API](https://capzy.ai/proxies)** | Global proxy egress with simple per-GB pricing. |
+| **[Web Scraper API](https://capzy.ai/web-scraper)** | Fetch, render, bypass anti-bot, and extract in one call. |
+
+One API key and one wallet balance across every product.
+
+## Keywords
+
+`kasada bot defense solver`, `kasada bot defense captcha solver`, `kasada bot defense bypass`, `kasada bot defense api`, `solve kasada bot defense`, `kasada bot defense solving service`, `captcha solver`, `captcha solving api`, `automated captcha solver`, `captcha bypass api`
 
 ## License
 
